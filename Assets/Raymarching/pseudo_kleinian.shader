@@ -279,8 +279,8 @@ gb_out frag_gbuffer(vs_out v)
 ENDCG
 
 SubShader {
-    //ZTest Always
     Fog { Mode off }
+    Cull Off
 
     Pass {
 CGPROGRAM
