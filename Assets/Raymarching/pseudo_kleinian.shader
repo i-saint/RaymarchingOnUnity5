@@ -55,11 +55,11 @@ float hartverdrahtet(float3 f)
 
 float pseudo_kleinian(float3 p)
 {
-    const float3 CSize = float3(0.92436,0.90756,0.92436);
-    const float Size = 1.0;
-    const float3 C = float3(0.0,0.0,0.0);
+    float3 CSize = float3(0.92436,0.90756,0.92436);
+    float Size = 1.0;
+    float3 C = float3(0.0,0.0,0.0);
     float DEfactor=1.;
-    const float3 Offset = float3(0.0,0.0,0.0);
+    float3 Offset = float3(0.0,0.0,0.0);
     float3 ap=p+1.;
     for(int i=0;i<10 ;i++){
         ap=p;
@@ -76,7 +76,7 @@ float pseudo_kleinian(float3 p)
 
 float pseudo_knightyan(float3 p)
 {
-    const float3 CSize = float3(0.63248,0.78632,0.875);
+    float3 CSize = float3(0.63248,0.78632,0.875);
     float DEfactor=1.;
     for(int i=0;i<6;i++){
         p = 2.*clamp(p, -CSize, CSize)-p;
@@ -295,7 +295,8 @@ ENDCG
         Stencil {
             Comp Always
             Pass Replace
-            Ref [_StencilNonBackground]
+            //Ref [_StencilNonBackground] // problematic
+            Ref 128
         }
 CGPROGRAM
 #pragma enable_d3d11_debug_symbols

@@ -30,10 +30,6 @@ public class Raymarcher : MonoBehaviour
             m_mesh.vertices = vertices;
             m_mesh.triangles = indices;
         }
-    }
-
-    void OnPreRender()
-    {
         if(m_cb==null)
         {
             m_cb = new CommandBuffer();
