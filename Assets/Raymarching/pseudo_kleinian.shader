@@ -20,37 +20,37 @@ float4 modc(float4 a, float4 b) { return a - b * floor(a/b); }
 // ( http://www.pouet.net/prod.php?which=59086 )
 float hartverdrahtet(float3 f)
 {
-	float3 cs=float3(.808,.808,1.167);
-	float fs=1.;
-	float3 fc=0;
-	float fu=10.;
-	float fd=.763;
-	
-	// scene selection
-	float time = _Time.y;
-	int i = int(modc(time/2.0, 8.0));
-	if(i==0) cs.y=.58;
-	if(i==1) cs.xy=.5;
-	if(i==2) cs.xy=.5;
-	if(i==3) fu=1.01,cs.x=.9;
-	if(i==4) fu=1.01,cs.x=.9;
-	if(i==6) cs=float3(.5,.5,1.04);
-	if(i==5) fu=.9;
-	if(i==7) fd=.7,fs=1.34,cs.xy=.5;
-	if(i==8) fc.z=-.38;
-	
-	//cs += sin(time)*0.2;
+    float3 cs=float3(.808,.808,1.167);
+    float fs=1.;
+    float3 fc=0;
+    float fu=10.;
+    float fd=.763;
+    
+    // scene selection
+    float time = _Time.y;
+    int i = int(modc(time/2.0, 9.0));
+    if(i==0) cs.y=.58;
+    if(i==1) cs.xy=.5;
+    if(i==2) cs.xy=.5;
+    if(i==3) fu=1.01,cs.x=.9;
+    if(i==4) fu=1.01,cs.x=.9;
+    if(i==6) cs=float3(.5,.5,1.04);
+    if(i==5) fu=.9;
+    if(i==7) fd=.7,fs=1.34,cs.xy=.5;
+    if(i==8) fc.z=-.38;
+    
+    //cs += sin(time)*0.2;
 
-	float v=1.;
-	for(int i=0; i<12; i++){
-		f=2.*clamp(f,-cs,cs)-f;
-		float c=max(fs/dot(f,f),1.);
-		f*=c;
-		v*=c;
-		f+=fc;
-	}
-	float z=length(f.xy)-fu;
-	return fd*max(z,abs(length(f.xy)*f.z)/sqrt(dot(f,f)))/abs(v);
+    float v=1.;
+    for(int i=0; i<12; i++){
+        f=2.*clamp(f,-cs,cs)-f;
+        float c=max(fs/dot(f,f),1.);
+        f*=c;
+        v*=c;
+        f+=fc;
+    }
+    float z=length(f.xy)-fu;
+    return fd*max(z,abs(length(f.xy)*f.z)/sqrt(dot(f,f)))/abs(v);
 }
 
 float pseudo_kleinian(float3 p)
@@ -67,7 +67,7 @@ float pseudo_kleinian(float3 p)
         float r2 = dot(p,p);
         float k = max(Size/r2,1.);
         p *= k;
-        DEfactor *= k;
+        DEfactor *= k + 0.05;
         p += C;
     }
     float r = abs(0.5*abs(p.z-Offset.z)/DEfactor);
@@ -75,14 +75,14 @@ float pseudo_kleinian(float3 p)
 }
 
 float pseudo_knightyan(float3 p)
-{	
+{
     const float3 CSize = float3(0.63248,0.78632,0.875);
     float DEfactor=1.;
     for(int i=0;i<6;i++){
         p = 2.*clamp(p, -CSize, CSize)-p;
         float k = max(0.70968/dot(p,p),1.);
         p *= k;
-        DEfactor *= k;
+        DEfactor *= k + 0.05;
     }
     float rxy=length(p.xy);
     return max(rxy-0.92784, abs(rxy*p.z) / length(p))/DEfactor;
@@ -167,9 +167,9 @@ vs_out vert(ia_out v)
 void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, out float3 o_normal, out float3 o_emission)
 {
     float ct = time * 0.1;
-
-    float3 camPos = float3(5.0*cos(ct), 5.0*sin(ct), 0.25*sin(ct)+0.75);
-    float3 camDir = normalize(camPos*-1.0);
+    
+    float3 camPos = float3(5.0*cos(time*0.1), 5.0*sin(time*0.1), 0.25*sin(time*0.25)+0.75);
+    float3 camDir = normalize(camPos*float3(-1.0, -1.0, sin(time*0.33)*1.5));
     //float3 camPos = _WorldSpaceCameraPos;
     //float3 camDir = float3(0.0, 0.0, 1.0);
 
@@ -198,7 +198,7 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     float r = modc(time*2.0, 20.0);
     float glow = max((modc(length(ray)-time*1.5, 10.0)-9.0)*2.5, 0.0);
     float2 p = pattern(ray.xy*1.);
-    if(p.x<1.1) {
+    if(p.x<1.3) {
         glow = 0.0;
     }
     else {
@@ -213,7 +213,7 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     o_raypos = ray;
     o_color = result.xyz;
     o_normal = normal;
-    o_emission = glow;
+    o_emission = float3(0.5, 0.5, 0.75)*glow;
 }
 
 float4 frag(vs_out v) : COLOR
@@ -264,14 +264,14 @@ gb_out frag_gbuffer(vs_out v)
 
     gb_out o;
     o.diffuse = float4(0.5, 0.5, 0.55, 1.0);
-    o.spec_smoothness = float4(0.2, 0.2, 0.2, 1.0);
+    o.spec_smoothness = float4(0.2, 0.2, 0.2, 0.5);
     o.normal = float4(normal*0.5+0.5, 1.0);
 
-    #ifndef UNITY_HDR_ON
-        //emission = exp2(-emission);
-    #endif
+    //#ifndef UNITY_HDR_ON
+    //    emission = exp2(-emission);
+    //#endif
 
-    o.emission = float4(emission, 1.0);
+    o.emission = float4(emission*0.5, 1.0);
     o.depth = ComputeDepth(mul(UNITY_MATRIX_VP, float4(raypos, 1.0)));
     return o;
 }
