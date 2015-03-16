@@ -242,7 +242,7 @@ struct gb_out
 
 float ComputeDepth(float4 clippos)
 {
-#if defined(SHADER_API_OPENGL) || defined(SHADER_API_GLES)
+#if defined(SHADER_TARGET_GLSL)
     return ((clippos.z / clippos.w) + 1.0) * 0.5;
 #else
     return clippos.z / clippos.w;
