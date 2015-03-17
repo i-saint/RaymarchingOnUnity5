@@ -42,4 +42,8 @@ public class Raymarcher : MonoBehaviour
             //m_camera.AddCommandBuffer(CameraEvent.AfterFinalPass, m_cb);
         }
     }
+
+    void OnPreRender()
+    {
+    }
 }

@@ -10,15 +10,14 @@ CGINCLUDE
 #include "UnityStandardCore.cginc"
 #include "distance_functions.cginc"
 
-
 float map(float3 p)
 {
     //return length(p)-1.0;
     //return kaleidoscopic_IFS(p);
     //return tglad_amazing_box(p);
-    return pseudo_kleinian(p);
-    //return pseudo_knightyan(p);
-    //return hartverdrahtet(p);
+    return pseudo_kleinian( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+    //return pseudo_knightyan( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+    //return hartverdrahtet( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
 }
 
 float3 guess_normal(float3 p)
@@ -79,6 +78,7 @@ struct vs_out
     float4 spos : TEXCOORD0;
 };
 
+
 vs_out vert(ia_out v)
 {
     vs_out o;
@@ -91,18 +91,12 @@ vs_out vert(ia_out v)
 void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, out float3 o_normal, out float3 o_emission)
 {
     float ct = time * 0.1;
-    
-    float3 camPos = float3(5.0*cos(time*0.1), 5.0*sin(time*0.1), 0.25*sin(time*0.25)+0.75);
-    float3 camDir = normalize(camPos*float3(-1.0, -1.0, sin(time*0.33)*1.5));
-    //float3 camPos = _WorldSpaceCameraPos;
-    //float3 camDir = float3(0.0, 0.0, 1.0);
+#if UNITY_UV_STARTS_AT_TOP
+        pos.y *= -1.0;
+#endif
 
-    float3 camUp  = normalize(float3(0.0, 1.0, 0.6));
-    float3 camSide = cross(camDir, camUp);
-    float focus = 1.8;
-
-    float3 rayDir = normalize(camSide*pos.x + camUp*pos.y + camDir*focus);
-    float3 ray = camPos;
+    float3 ray_dir = normalize(get_camera_right()*pos.x + get_camera_up()*pos.y + get_camera_forward()*get_camera_focal_length());
+    float3 ray = get_camera_position();
     float m = 0.0;
     float d = 0.0, total_d = 0.0;
     const int MAX_MARCH = 100;
@@ -110,7 +104,7 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     for(int i=0; i<MAX_MARCH; ++i) {
         d = map(ray);
         total_d += d;
-        ray += rayDir * d;
+        ray += ray_dir * d;
         m += 1.0;
         if(d<0.001) { break; }
         if(total_d>MAX_DISTANCE) { break; }
@@ -128,7 +122,7 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     else {
         glow += 0.0;
     }
-    glow += max(1.0-abs(dot(-camDir, normal)) - 0.4, 0.0) * 0.5;
+    glow += max(1.0-abs(dot(-get_camera_forward(), normal)) - 0.4, 0.0) * 0.5;
     
     float c = total_d*0.01;
     float4 result = float4( c + float3(0.02, 0.02, 0.025)*m*0.4, 1.0 );
@@ -176,7 +170,7 @@ float ComputeDepth(float4 clippos)
 gb_out frag_gbuffer(vs_out v)
 {
     float time = _Time.y;
-    float2 pos = v.spos.xy / v.spos.w;
+    float2 pos = v.spos.xy;
     float aspect = _ScreenParams.x / _ScreenParams.y;
     pos.x *= aspect;
 

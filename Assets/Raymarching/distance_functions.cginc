@@ -1,31 +1,7 @@
-#define PI 3.1415926535897932384626433832795
+#ifndef distance_functions_h
+#define distance_functions_h
 
-float  modc(float  a, float  b) { return a - b * floor(a/b); }
-float2 modc(float2 a, float2 b) { return a - b * floor(a/b); }
-float3 modc(float3 a, float3 b) { return a - b * floor(a/b); }
-float4 modc(float4 a, float4 b) { return a - b * floor(a/b); }
-
-float3 rotateX(float3 p, float angle)
-{
-    float c = cos(angle);
-    float s = sin(angle);
-    return float3(p.x, c*p.y+s*p.z, -s*p.y+c*p.z);
-}
-
-float3 rotateY(float3 p, float angle)
-{
-    float c = cos(angle);
-    float s = sin(angle);
-    return float3(c*p.x-s*p.z, p.y, s*p.x+c*p.z);
-}
-
-float3 rotateZ(float3 p, float angle)
-{
-    float c = cos(angle);
-    float s = sin(angle);
-    return float3(c*p.x+s*p.y, -s*p.x+c*p.y, p.z);
-}
-
+#include "foundation.cginc"
 
 float kaleidoscopic_IFS(float3 z)
 {
@@ -140,3 +116,5 @@ float pseudo_knightyan(float3 p)
     float rxy=length(p.xy);
     return max(rxy-0.92784, abs(rxy*p.z) / length(p))/DEfactor;
 }
+
+#endif // distance_functions_h
