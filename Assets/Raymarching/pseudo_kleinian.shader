@@ -87,16 +87,20 @@ vs_out vert(ia_out v)
     return o;
 }
 
-
 void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, out float3 o_normal, out float3 o_emission)
 {
     float ct = time * 0.1;
 #if UNITY_UV_STARTS_AT_TOP
         pos.y *= -1.0;
 #endif
+    float3 cam_pos      = get_camera_position();
+    float3 cam_forward  = get_camera_forward();
+    float3 cam_up       = get_camera_up();
+    float3 cam_right    = get_camera_right();
+    float  cam_focal_len= get_camera_focal_length();
 
-    float3 ray_dir = normalize(get_camera_right()*pos.x + get_camera_up()*pos.y + get_camera_forward()*get_camera_focal_length());
-    float3 ray = get_camera_position();
+    float3 ray_dir = normalize(cam_right*pos.x + cam_up*pos.y + cam_forward*cam_focal_len);
+    float3 ray = cam_pos;
     float m = 0.0;
     float d = 0.0, total_d = 0.0;
     const int MAX_MARCH = 100;
@@ -115,14 +119,14 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
 
     float r = modc(time*2.0, 20.0);
     float glow = max((modc(length(ray)-time*1.5, 10.0)-9.0)*2.5, 0.0);
-    float2 p = pattern(ray.xy*1.);
+    float2 p = pattern(ray.xz*0.5);
     if(p.x<1.3) {
         glow = 0.0;
     }
     else {
         glow += 0.0;
     }
-    glow += max(1.0-abs(dot(-get_camera_forward(), normal)) - 0.4, 0.0) * 0.5;
+    glow += max(1.0-abs(dot(-cam_forward, normal)) - 0.4, 0.0) * 0.5;
     
     float c = total_d*0.01;
     float4 result = float4( c + float3(0.02, 0.02, 0.025)*m*0.4, 1.0 );

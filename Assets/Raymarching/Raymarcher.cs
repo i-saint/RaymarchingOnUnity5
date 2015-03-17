@@ -6,6 +6,7 @@ using UnityEditor;
 #endif // UNITY_EDITOR
 
 [RequireComponent(typeof(Camera))]
+[ExecuteInEditMode]
 public class Raymarcher : MonoBehaviour
 {
     public Material m_material;

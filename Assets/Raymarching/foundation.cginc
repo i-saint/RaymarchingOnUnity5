@@ -11,30 +11,11 @@ float2 modc(float2 a, float2 b) { return a - b * floor(a/b); }
 float3 modc(float3 a, float3 b) { return a - b * floor(a/b); }
 float4 modc(float4 a, float4 b) { return a - b * floor(a/b); }
 
-float3 get_camera_position()
-{
-    return _WorldSpaceCameraPos;
-}
-
-float3 get_camera_forward()
-{
-    return -float3(UNITY_MATRIX_V[0][2], UNITY_MATRIX_V[1][2], UNITY_MATRIX_V[2][2]);
-}
-
-float3 get_camera_up()
-{
-    return float3(UNITY_MATRIX_V[0][1], UNITY_MATRIX_V[1][1], UNITY_MATRIX_V[2][1]);
-}
-
-float3 get_camera_right()
-{
-    return float3(UNITY_MATRIX_V[0][0], UNITY_MATRIX_V[1][0], UNITY_MATRIX_V[2][0]);
-}
-
-float get_camera_focal_length()
-{
-    return UNITY_MATRIX_P[0][0] * 2.0;
-}
+float3 get_camera_position()    { return _WorldSpaceCameraPos; }
+float3 get_camera_forward()     { return -UNITY_MATRIX_V[2].xyz; }
+float3 get_camera_up()          { return UNITY_MATRIX_V[1].xyz; }
+float3 get_camera_right()       { return UNITY_MATRIX_V[0].xyz; }
+float get_camera_focal_length() { return abs(UNITY_MATRIX_P[1][1]); }
 
 float3 rotateX(float3 p, float angle)
 {
