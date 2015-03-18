@@ -30,8 +30,10 @@ float kaleidoscopic_IFS(float3 z)
 }
 
 
-float tglad_amazing_box(float3 z0)
+float tglad_formula(float3 z0)
 {
+    z0 = modc(z0, 2.0);
+
     float mr=0.25, mxr=1.0;
     float4 scale=float4(-3.12,-3.12,-3.12,3.12), p0=float4(0.0,1.59,-1.0,0.0);
     float4 z = float4(z0,1.0);

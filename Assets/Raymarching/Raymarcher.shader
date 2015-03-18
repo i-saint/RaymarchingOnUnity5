@@ -1,4 +1,4 @@
-﻿Shader "Raymarcher/pseudo_kleinian" {
+﻿Shader "Raymarcher/RayMarcher" {
 Properties {
     _Color ("Color", Color) = (1,1,1,1)
     _MainTex ("Albedo (RGB)", 2D) = "white" {}
@@ -10,12 +10,22 @@ CGINCLUDE
 #include "UnityStandardCore.cginc"
 #include "distance_functions.cginc"
 
+int g_scene;
+
 float map(float3 p)
 {
+    if(g_scene==0) {
+        return pseudo_kleinian( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+    }
+    else if (g_scene==1) {
+        return tglad_formula(p);
+    }
+    else {
+        return pseudo_knightyan( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+    }
+
     //return length(p)-1.0;
     //return kaleidoscopic_IFS(p);
-    //return tglad_amazing_box(p);
-    return pseudo_kleinian( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
     //return pseudo_knightyan( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
     //return hartverdrahtet( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
 }
