@@ -42,6 +42,7 @@ public class Raymarcher : MonoBehaviour
             //m_cb.DrawMesh(m_mesh, Matrix4x4.identity, m_material, 0, 0);
             //m_camera.AddCommandBuffer(CameraEvent.AfterFinalPass, m_cb);
         }
+        RenderSettings.fogColor = new Color(0.16f, 0.13f, 0.20f);
     }
 
     void OnPreRender()

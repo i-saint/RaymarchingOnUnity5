@@ -11,8 +11,13 @@ public class CameraControl : MonoBehaviour
     public Camera m_camera;
     public Transform m_look_target;
 
+    public float m_follow_strength;
+    public Vector3 m_target_offset;
+    Vector3 m_look_pos;
+
     void Awake()
     {
+        m_look_pos = m_look_target.position;
     }
 
     void Update()
@@ -49,6 +54,7 @@ public class CameraControl : MonoBehaviour
             m_look_target.position = m_look_target.position + (Vector3)rel;
         }
 
-        cam_t.transform.LookAt(m_look_target.position);
+        m_look_pos += (m_look_target.position - m_look_pos) * m_follow_strength;
+        cam_t.transform.LookAt(m_look_pos + m_target_offset);
     }
 }

@@ -87,6 +87,13 @@ vs_out vert(ia_out v)
     return o;
 }
 
+vs_out vert_dummy(ia_out v)
+{
+    vs_out o;
+    o.vertex = o.spos = float4(0.0, 0.0, 0.0, 1.0);
+    return o;
+}
+
 void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, out float3 o_normal, out float3 o_emission)
 {
     float ct = time * 0.1;
@@ -135,7 +142,7 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     o_raypos = ray;
     o_color = result.xyz;
     o_normal = normal;
-    o_emission = float3(0.5, 0.5, 0.75)*glow;
+    o_emission = float3(0.7, 0.7, 1.0)*glow;
 }
 
 float4 frag(vs_out v) : COLOR
@@ -201,10 +208,12 @@ gb_out frag_gbuffer(vs_out v)
 ENDCG
 
 SubShader {
-    Fog { Mode off }
+    Tags { "RenderType"="Opaque" }
     Cull Off
 
     Pass {
+        Name "FORWARD" 
+        Tags { "LightMode" = "ForwardBase" }
 CGPROGRAM
 #pragma enable_d3d11_debug_symbols
 #pragma target 3.0
@@ -214,6 +223,8 @@ ENDCG
     }
 
     Pass {
+        Name "DEFERRED"
+        Tags { "LightMode" = "Deferred" }
         Stencil {
             Comp Always
             Pass Replace
@@ -227,5 +238,16 @@ CGPROGRAM
 #pragma fragment frag_gbuffer
 ENDCG
     }
+
+    Pass {
+        Name "ShadowCaster"
+        Tags { "LightMode" = "ShadowCaster" }
+CGPROGRAM
+#pragma target 3.0
+#pragma vertex vert_dummy
+#pragma fragment frag
+ENDCG
+    }
 }
+Fallback Off
 }
