@@ -17,6 +17,7 @@ float3 get_camera_up()          { return UNITY_MATRIX_V[1].xyz; }
 float3 get_camera_right()       { return UNITY_MATRIX_V[0].xyz; }
 float get_camera_focal_length() { return abs(UNITY_MATRIX_P[1][1]); }
 
+
 float3 rotateX(float3 p, float angle)
 {
     float c = cos(angle);
@@ -36,6 +37,15 @@ float3 rotateZ(float3 p, float angle)
     float c = cos(angle);
     float s = sin(angle);
     return float3(c*p.x+s*p.y, -s*p.x+c*p.y, p.z);
+}
+
+float4x4 translation_matrix(float3 t)
+{
+    return float4x4(
+        1.0, 0.0, 0.0, t.x,
+        0.0, 1.0, 0.0, t.y,
+        0.0, 0.0, 1.0, t.z,
+        0.0, 0.0, 0.0, 1.0 );
 }
 
 float3x3 axis_rotation_matrix33(float3 axis, float angle)

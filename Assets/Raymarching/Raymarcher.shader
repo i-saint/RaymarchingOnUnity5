@@ -104,6 +104,8 @@ vs_out vert_dummy(ia_out v)
     return o;
 }
 
+
+
 void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, out float3 o_normal, out float3 o_emission)
 {
     float ct = time * 0.1;
@@ -117,11 +119,11 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     float  cam_focal_len= get_camera_focal_length();
 
     float3 ray_dir = normalize(cam_right*pos.x + cam_up*pos.y + cam_forward*cam_focal_len);
-    float3 ray = cam_pos;
+    float3 ray = cam_pos + ray_dir * _ProjectionParams.y;
     float m = 0.0;
     float d = 0.0, total_d = 0.0;
     const int MAX_MARCH = 100;
-    const float MAX_DISTANCE = 100.0;
+    float MAX_DISTANCE = _ProjectionParams.z - _ProjectionParams.y;
     for(int i=0; i<MAX_MARCH; ++i) {
         d = map(ray);
         total_d += d;
@@ -130,7 +132,7 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
         if(d<0.001) { break; }
         if(total_d>MAX_DISTANCE) { break; }
     }
-    if(total_d>MAX_DISTANCE) { discard; }
+    if(d>0.1) { discard; }
 
     float3 normal = guess_normal(ray);
 
@@ -152,25 +154,10 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     o_raypos = ray;
     o_color = result.xyz;
     o_normal = normal;
-    o_emission = float3(0.7, 0.7, 1.0)*glow;
+    o_emission = float3(0.7, 0.7, 1.0)*glow*0.6;
 }
 
-float4 frag(vs_out v) : COLOR
-{
-    float time = _Time.y;
-    float2 pos = v.spos.xy / v.spos.w;
-    float aspect = _ScreenParams.x / _ScreenParams.y;
-    pos.x *= aspect;
-
-    float3 raypos;
-    float3 color;
-    float3 normal;
-    float3 emission;
-    raymarch(time, pos, raypos, color, normal, emission);
-    return float4(color, 1.0);
-}
-
-struct gb_out
+struct ps_out
 {
     half4 diffuse           : SV_Target0; // RT0: diffuse color (rgb), occlusion (a)
     half4 spec_smoothness   : SV_Target1; // RT1: spec color (rgb), smoothness (a)
@@ -188,7 +175,9 @@ float ComputeDepth(float4 clippos)
 #endif
 }
 
-gb_out frag_gbuffer(vs_out v)
+int g_hdr;
+
+ps_out frag_gbuffer(vs_out v)
 {
     float time = _Time.y;
     float2 pos = v.spos.xy;
@@ -201,16 +190,12 @@ gb_out frag_gbuffer(vs_out v)
     float3 emission;
     raymarch(time, pos, raypos, color, normal, emission);
 
-    gb_out o;
-    o.diffuse = float4(0.5, 0.5, 0.55, 1.0);
+    ps_out o;
+    o.diffuse = float4(0.75, 0.75, 0.80, 1.0);
     o.spec_smoothness = float4(0.2, 0.2, 0.2, 0.5);
     o.normal = float4(normal*0.5+0.5, 1.0);
 
-    //#ifndef UNITY_HDR_ON
-    //    emission = exp2(-emission);
-    //#endif
-
-    o.emission = float4(emission*0.5, 1.0);
+    o.emission = g_hdr ? float4(emission, 1.0) : exp2(float4(-emission, 1.0));
     o.depth = ComputeDepth(mul(UNITY_MATRIX_VP, float4(raypos, 1.0)));
     return o;
 }
@@ -220,17 +205,6 @@ ENDCG
 SubShader {
     Tags { "RenderType"="Opaque" }
     Cull Off
-
-    Pass {
-        Name "FORWARD" 
-        Tags { "LightMode" = "ForwardBase" }
-CGPROGRAM
-#pragma enable_d3d11_debug_symbols
-#pragma target 3.0
-#pragma vertex vert
-#pragma fragment frag
-ENDCG
-    }
 
     Pass {
         Name "DEFERRED"
@@ -246,16 +220,6 @@ CGPROGRAM
 #pragma target 3.0
 #pragma vertex vert
 #pragma fragment frag_gbuffer
-ENDCG
-    }
-
-    Pass {
-        Name "ShadowCaster"
-        Tags { "LightMode" = "ShadowCaster" }
-CGPROGRAM
-#pragma target 3.0
-#pragma vertex vert_dummy
-#pragma fragment frag
 ENDCG
     }
 }
