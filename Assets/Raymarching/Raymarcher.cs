@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 #if UNITY_EDITOR
@@ -66,16 +67,17 @@ public static class RaymarcherUtils
 [ExecuteInEditMode]
 public class Raymarcher : MonoBehaviour
 {
-    public Shader m_shader;
+    public Material m_material;
+    public bool m_enable_adaptive;
     public int m_scene;
     public Color m_fog_color = new Color(0.16f, 0.13f, 0.20f);
     Mesh m_quad;
     Mesh m_detailed_quad;
 
-    Material m_material;
     Camera m_camera;
+    CommandBuffer m_cb_prepass;
     CommandBuffer m_cb;
-    int m_frame;
+    bool m_clear_commandbuffer;
 
     void Awake()
     {
@@ -90,15 +92,19 @@ public class Raymarcher : MonoBehaviour
         }
     }
 
+#if UNITY_EDITOR
+    void OnValidate()
+    {
+        m_clear_commandbuffer = true;
+    }
+#endif // UNITY_EDITOR
+
     void OnPreRender()
     {
         Shader.SetGlobalFloat("g_frame", Time.frameCount);
         Shader.SetGlobalInt("g_hdr", m_camera.hdr ? 1 : 0);
+        Shader.SetGlobalInt("g_enable_adaptive", m_enable_adaptive ? 1 : 0);
 
-        if (m_material == null)
-        {
-            m_material = new Material(m_shader);
-        }
         if (m_quad == null)
         {
             m_quad = RaymarcherUtils.GenerateQuad();
@@ -108,11 +114,51 @@ public class Raymarcher : MonoBehaviour
             m_detailed_quad = RaymarcherUtils.GenerateDetailedQuad();
         }
 
+        if (m_clear_commandbuffer)
+        {
+            m_clear_commandbuffer = false;
+            if (m_camera != null)
+            {
+                if (m_cb_prepass != null)
+                {
+                    m_camera.RemoveCommandBuffer(CameraEvent.BeforeGBuffer, m_cb_prepass);
+                }
+                if (m_cb != null)
+                {
+                    m_camera.RemoveCommandBuffer(CameraEvent.AfterGBuffer, m_cb);
+                }
+                m_cb = null;
+            }
+        }
+
         if (m_cb==null)
         {
+            if (m_enable_adaptive)
+            {
+                m_cb_prepass = new CommandBuffer();
+                m_cb_prepass.name = "Raymarcher Adaptive PrePass";
+
+                int qdepth = Shader.PropertyToID("QuarterDepth");
+                int hdepth = Shader.PropertyToID("HalfDepth");
+                m_cb_prepass.GetTemporaryRT(qdepth, m_camera.pixelWidth / 4, m_camera.pixelHeight / 4, 0, FilterMode.Point, RenderTextureFormat.RFloat);
+                m_cb_prepass.GetTemporaryRT(hdepth, m_camera.pixelWidth / 2, m_camera.pixelHeight / 2, 0, FilterMode.Point, RenderTextureFormat.RFloat);
+
+                m_cb_prepass.SetRenderTarget(qdepth);
+                m_cb_prepass.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 1);
+
+                m_cb_prepass.SetRenderTarget(hdepth);
+                m_cb_prepass.SetGlobalTexture("g_depth", qdepth);
+                m_cb_prepass.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 2);
+
+                m_cb_prepass.SetGlobalTexture("g_depth", hdepth);
+
+                m_cb_prepass.ReleaseTemporaryRT(qdepth);
+                m_cb_prepass.ReleaseTemporaryRT(hdepth);
+                m_camera.AddCommandBuffer(CameraEvent.BeforeGBuffer, m_cb_prepass);
+            }
+
             m_cb = new CommandBuffer();
             m_cb.name = "Raymarcher";
-
             m_cb.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 0);
             m_camera.AddCommandBuffer(CameraEvent.AfterGBuffer, m_cb);
         }

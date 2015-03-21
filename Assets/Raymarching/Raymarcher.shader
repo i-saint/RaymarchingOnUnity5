@@ -10,7 +10,15 @@ CGINCLUDE
 #include "UnityStandardCore.cginc"
 #include "distance_functions.cginc"
 
+#define MAX_MARCH_QUARTER_PASS 100
+#define MAX_MARCH_HALF_PASS 40
+#define MAX_MARCH_GBUFFER_PASS 20
+
+#define MAX_MARCH_SINGLE_GBUFFER_PASS 100
+
 int g_scene;
+int g_hdr;
+int g_enable_adaptive;
 
 float map(float3 p)
 {
@@ -105,13 +113,8 @@ vs_out vert_dummy(ia_out v)
 }
 
 
-
-void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, out float3 o_normal, out float3 o_emission)
+void raymarching(float2 pos, const int num_march, inout float o_total_distance, out float o_num_march, out float o_last_distance, out float3 o_raypos)
 {
-    float ct = time * 0.1;
-#if UNITY_UV_STARTS_AT_TOP
-        pos.y *= -1.0;
-#endif
     float3 cam_pos      = get_camera_position();
     float3 cam_forward  = get_camera_forward();
     float3 cam_up       = get_camera_up();
@@ -119,45 +122,23 @@ void raymarch(float time, float2 pos, out float3 o_raypos, out float3 o_color, o
     float  cam_focal_len= get_camera_focal_length();
 
     float3 ray_dir = normalize(cam_right*pos.x + cam_up*pos.y + cam_forward*cam_focal_len);
-    float3 ray = cam_pos + ray_dir * _ProjectionParams.y;
-    float m = 0.0;
-    float d = 0.0, total_d = 0.0;
-    const int MAX_MARCH = 100;
-    float MAX_DISTANCE = _ProjectionParams.z - _ProjectionParams.y;
-    for(int i=0; i<MAX_MARCH; ++i) {
-        d = map(ray);
-        total_d += d;
-        ray += ray_dir * d;
-        m += 1.0;
-        if(d<0.001) { break; }
-        if(total_d>MAX_DISTANCE) { break; }
-    }
-    if(d>0.1) { discard; }
+    float max_distance = _ProjectionParams.z - _ProjectionParams.y;
+    o_raypos = cam_pos + ray_dir * o_total_distance;
 
-    float3 normal = guess_normal(ray);
-
-    float r = modc(time*2.0, 20.0);
-    float glow = max((modc(length(ray)-time*1.5, 10.0)-9.0)*2.5, 0.0);
-    float2 p = pattern(ray.xz*0.5);
-    if(p.x<1.3) {
-        glow = 0.0;
+    o_num_march = 0.0;
+    o_last_distance = 0.0;
+    for(int i=0; i<num_march; ++i) {
+        o_last_distance = map(o_raypos);
+        o_total_distance += o_last_distance;
+        o_raypos += ray_dir * o_last_distance;
+        o_num_march += 1.0;
+        if(o_last_distance < 0.001 || o_total_distance > max_distance) { break; }
     }
-    else {
-        glow += 0.0;
-    }
-    glow += max(1.0-abs(dot(-cam_forward, normal)) - 0.4, 0.0) * 0.5;
-    
-    float c = total_d*0.01;
-    float4 result = float4( c + float3(0.02, 0.02, 0.025)*m*0.4, 1.0 );
-    result.xyz += float3(0.5, 0.5, 0.75)*glow;
-
-    o_raypos = ray;
-    o_color = result.xyz;
-    o_normal = normal;
-    o_emission = float3(0.7, 0.7, 1.0)*glow*0.6;
 }
 
-struct ps_out
+
+
+struct gbuffer_out
 {
     half4 diffuse           : SV_Target0; // RT0: diffuse color (rgb), occlusion (a)
     half4 spec_smoothness   : SV_Target1; // RT1: spec color (rgb), smoothness (a)
@@ -166,38 +147,86 @@ struct ps_out
     float depth             : SV_Depth;
 };
 
-float ComputeDepth(float4 clippos)
+
+gbuffer_out frag_gbuffer(vs_out v)
 {
-#if defined(SHADER_TARGET_GLSL)
-    return ((clippos.z / clippos.w) + 1.0) * 0.5;
-#else
-    return clippos.z / clippos.w;
+#if UNITY_UV_STARTS_AT_TOP
+    v.spos.y *= -1.0;
 #endif
-}
-
-int g_hdr;
-
-ps_out frag_gbuffer(vs_out v)
-{
     float time = _Time.y;
     float2 pos = v.spos.xy;
-    float aspect = _ScreenParams.x / _ScreenParams.y;
-    pos.x *= aspect;
+    pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float3 raypos;
-    float3 color;
-    float3 normal;
-    float3 emission;
-    raymarch(time, pos, raypos, color, normal, emission);
+    float num_march;
+    float last_distance;
+    float total_distance = 0.0;
+    float3 ray_pos;
+    if(g_enable_adaptive) {
+        total_distance = sample_depth(v.spos.xy*0.5+0.5);
+        raymarching(pos, MAX_MARCH_GBUFFER_PASS, total_distance, num_march, last_distance, ray_pos);
+    }
+    else {
+        raymarching(pos, MAX_MARCH_SINGLE_GBUFFER_PASS, total_distance, num_march, last_distance, ray_pos);
+    }
 
-    ps_out o;
+    //if(last_distance>0.1) { discard; }
+
+    float3 cam_forward  = get_camera_forward();
+    float3 normal = guess_normal(ray_pos);
+
+    float glow = max((modc(length(ray_pos)-time*1.5, 10.0)-9.0)*2.5, 0.0);
+    float2 p = pattern(ray_pos.xz*0.5);
+    if(p.x<1.3) {
+        glow = 0.0;
+    }
+    else {
+        glow += 0.0;
+    }
+    glow += max(1.0-abs(dot(-cam_forward, normal)) - 0.4, 0.0) * 0.5;
+    
+    float c = total_distance*0.01;
+    float4 color = float4( c + float3(0.02, 0.02, 0.025)*num_march*0.4, 1.0 );
+    color.xyz += float3(0.5, 0.5, 0.75)*glow;
+
+    float3 emission = float3(0.7, 0.7, 1.0)*glow*0.6;
+
+    gbuffer_out o;
     o.diffuse = float4(0.75, 0.75, 0.80, 1.0);
     o.spec_smoothness = float4(0.2, 0.2, 0.2, 0.5);
     o.normal = float4(normal*0.5+0.5, 1.0);
-
     o.emission = g_hdr ? float4(emission, 1.0) : exp2(float4(-emission, 1.0));
-    o.depth = ComputeDepth(mul(UNITY_MATRIX_VP, float4(raypos, 1.0)));
+    o.depth = compute_depth(mul(UNITY_MATRIX_VP, float4(ray_pos, 1.0)));
     return o;
+}
+
+float frag_quarter_depth(vs_out v) : SV_Target0
+{
+#if UNITY_UV_STARTS_AT_TOP
+    v.spos.y *= -1.0;
+#endif
+    float2 pos = v.spos.xy;
+    pos.x *= _ScreenParams.x / _ScreenParams.y;
+
+    float num_march, last_distance, total_distance = _ProjectionParams.y;
+    float3 ray_pos;
+    raymarching(pos, MAX_MARCH_QUARTER_PASS, total_distance, num_march, last_distance, ray_pos);
+
+    return total_distance;
+}
+
+float frag_half_depth(vs_out v) : SV_Target0
+{
+#if UNITY_UV_STARTS_AT_TOP
+    v.spos.y *= -1.0;
+#endif
+    float2 pos = v.spos.xy;
+    pos.x *= _ScreenParams.x / _ScreenParams.y;
+
+    float num_march, last_distance, total_distance = sample_depth(v.spos.xy*0.5+0.5);
+    float3 ray_pos;
+    raymarching(pos, MAX_MARCH_HALF_PASS, total_distance, num_march, last_distance, ray_pos);
+
+    return total_distance;
 }
 
 ENDCG
@@ -220,6 +249,26 @@ CGPROGRAM
 #pragma target 3.0
 #pragma vertex vert
 #pragma fragment frag_gbuffer
+ENDCG
+    }
+
+    Pass {
+        Name "QuarterDepth"
+        ZWrite Off
+        ZTest Always
+CGPROGRAM
+#pragma vertex vert
+#pragma fragment frag_quarter_depth
+ENDCG
+    }
+
+    Pass {
+        Name "HalfDepth"
+        ZWrite Off
+        ZTest Always
+CGPROGRAM
+#pragma vertex vert
+#pragma fragment frag_half_depth
 ENDCG
     }
 }

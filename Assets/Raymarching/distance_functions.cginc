@@ -58,17 +58,19 @@ float hartverdrahtet(float3 f)
     float fd=.763;
     
     // scene selection
-    float time = _Time.y;
-    int i = int(modc(time/2.0, 9.0));
-    if(i==0) cs.y=.58;
-    if(i==1) cs.xy=.5;
-    if(i==2) cs.xy=.5;
-    if(i==3) fu=1.01,cs.x=.9;
-    if(i==4) fu=1.01,cs.x=.9;
-    if(i==6) cs=float3(.5,.5,1.04);
-    if(i==5) fu=.9;
-    if(i==7) fd=.7,fs=1.34,cs.xy=.5;
-    if(i==8) fc.z=-.38;
+    {
+        float time = _Time.y;
+        int i = int(modc(time/2.0, 9.0));
+        if(i==0) cs.y=.58;
+        if(i==1) cs.xy=.5;
+        if(i==2) cs.xy=.5;
+        if(i==3) fu=1.01,cs.x=.9;
+        if(i==4) fu=1.01,cs.x=.9;
+        if(i==6) cs=float3(.5,.5,1.04);
+        if(i==5) fu=.9;
+        if(i==7) fd=.7,fs=1.34,cs.xy=.5;
+        if(i==8) fc.z=-.38;
+    }
     
     //cs += sin(time)*0.2;
 

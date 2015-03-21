@@ -17,6 +17,29 @@ float3 get_camera_up()          { return UNITY_MATRIX_V[1].xyz; }
 float3 get_camera_right()       { return UNITY_MATRIX_V[0].xyz; }
 float get_camera_focal_length() { return abs(UNITY_MATRIX_P[1][1]); }
 
+float compute_depth(float4 clippos)
+{
+#if defined(SHADER_TARGET_GLSL)
+    return ((clippos.z / clippos.w) + 1.0) * 0.5;
+#else
+    return clippos.z / clippos.w;
+#endif
+}
+
+sampler2D g_depth;
+float sample_depth(float2 t)
+{
+    float2 p = (_ScreenParams.zw - 1.0)*2.0;
+    float d1 = tex2D(g_depth, t).x;
+    float d2 = min(
+        min(tex2D(g_depth, t+float2( p.x, 0.0)).x, tex2D(g_depth, t+float2(-p.x, 0.0)).x),
+        min(tex2D(g_depth, t+float2( 0.0, p.y)).x, tex2D(g_depth, t+float2( 0.0,-p.y)).x) );
+    //float d3 = min(
+    //    min(tex2D(g_depth, t+float2( p.x, p.y)).x, tex2D(g_depth, t+float2(-p.x, p.y)).x),
+    //    min(tex2D(g_depth, t+float2( p.x,-p.y)).x, tex2D(g_depth, t+float2(-p.x,-p.y)).x) );
+    return max(min(d1, d2)-0.1, 0.0);
+}
+
 
 float3 rotateX(float3 p, float angle)
 {
