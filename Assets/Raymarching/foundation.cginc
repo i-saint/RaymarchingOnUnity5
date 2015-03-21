@@ -26,17 +26,21 @@ float compute_depth(float4 clippos)
 #endif
 }
 
+sampler2D g_qsteps;
+sampler2D g_hsteps;
+
 sampler2D g_depth;
+float sample_depth_internal(float2 t)
+{
+    return modc(tex2D(g_depth, t).x, _ProjectionParams.z);
+}
 float sample_depth(float2 t)
 {
     float2 p = (_ScreenParams.zw - 1.0)*2.0;
-    float d1 = tex2D(g_depth, t).x;
+    float d1 = sample_depth_internal(t);
     float d2 = min(
-        min(tex2D(g_depth, t+float2( p.x, 0.0)).x, tex2D(g_depth, t+float2(-p.x, 0.0)).x),
-        min(tex2D(g_depth, t+float2( 0.0, p.y)).x, tex2D(g_depth, t+float2( 0.0,-p.y)).x) );
-    //float d3 = min(
-    //    min(tex2D(g_depth, t+float2( p.x, p.y)).x, tex2D(g_depth, t+float2(-p.x, p.y)).x),
-    //    min(tex2D(g_depth, t+float2( p.x,-p.y)).x, tex2D(g_depth, t+float2(-p.x,-p.y)).x) );
+        min(sample_depth_internal(t+float2( p.x, 0.0)), sample_depth_internal(t+float2(-p.x, 0.0))),
+        min(sample_depth_internal(t+float2( 0.0, p.y)), sample_depth_internal(t+float2( 0.0,-p.y))) );
     return max(min(d1, d2)-0.1, 0.0);
 }
 

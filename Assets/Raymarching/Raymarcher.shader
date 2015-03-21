@@ -11,14 +11,15 @@ CGINCLUDE
 #include "distance_functions.cginc"
 
 #define MAX_MARCH_QUARTER_PASS 100
-#define MAX_MARCH_HALF_PASS 40
-#define MAX_MARCH_GBUFFER_PASS 20
+#define MAX_MARCH_HALF_PASS 50
+#define MAX_MARCH_GBUFFER_PASS 25
 
 #define MAX_MARCH_SINGLE_GBUFFER_PASS 100
 
 int g_scene;
 int g_hdr;
 int g_enable_adaptive;
+int g_dbg_show_steps;
 
 float map(float3 p)
 {
@@ -113,7 +114,7 @@ vs_out vert_dummy(ia_out v)
 }
 
 
-void raymarching(float2 pos, const int num_march, inout float o_total_distance, out float o_num_march, out float o_last_distance, out float3 o_raypos)
+void raymarching(float2 pos, const int num_steps, inout float o_total_distance, out float o_num_steps, out float o_last_distance, out float3 o_raypos)
 {
     float3 cam_pos      = get_camera_position();
     float3 cam_forward  = get_camera_forward();
@@ -125,15 +126,16 @@ void raymarching(float2 pos, const int num_march, inout float o_total_distance, 
     float max_distance = _ProjectionParams.z - _ProjectionParams.y;
     o_raypos = cam_pos + ray_dir * o_total_distance;
 
-    o_num_march = 0.0;
+    o_num_steps = 0.0;
     o_last_distance = 0.0;
-    for(int i=0; i<num_march; ++i) {
+    for(int i=0; i<num_steps; ++i) {
         o_last_distance = map(o_raypos);
         o_total_distance += o_last_distance;
         o_raypos += ray_dir * o_last_distance;
-        o_num_march += 1.0;
+        o_num_steps += 1.0;
         if(o_last_distance < 0.001 || o_total_distance > max_distance) { break; }
     }
+    //if(o_total_distance > max_distance) { discard; }
 }
 
 
@@ -157,16 +159,18 @@ gbuffer_out frag_gbuffer(vs_out v)
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_march;
+    int max_steps = MAX_MARCH_SINGLE_GBUFFER_PASS;
+    float num_steps;
     float last_distance;
     float total_distance = 0.0;
     float3 ray_pos;
     if(g_enable_adaptive) {
         total_distance = sample_depth(v.spos.xy*0.5+0.5);
-        raymarching(pos, MAX_MARCH_GBUFFER_PASS, total_distance, num_march, last_distance, ray_pos);
+        max_steps = MAX_MARCH_GBUFFER_PASS;
+        raymarching(pos, MAX_MARCH_GBUFFER_PASS, total_distance, num_steps, last_distance, ray_pos);
     }
     else {
-        raymarching(pos, MAX_MARCH_SINGLE_GBUFFER_PASS, total_distance, num_march, last_distance, ray_pos);
+        raymarching(pos, MAX_MARCH_SINGLE_GBUFFER_PASS, total_distance, num_steps, last_distance, ray_pos);
     }
 
     //if(last_distance>0.1) { discard; }
@@ -185,7 +189,7 @@ gbuffer_out frag_gbuffer(vs_out v)
     glow += max(1.0-abs(dot(-cam_forward, normal)) - 0.4, 0.0) * 0.5;
     
     float c = total_distance*0.01;
-    float4 color = float4( c + float3(0.02, 0.02, 0.025)*num_march*0.4, 1.0 );
+    float4 color = float4( c + float3(0.02, 0.02, 0.025)*num_steps*0.4, 1.0 );
     color.xyz += float3(0.5, 0.5, 0.75)*glow;
 
     float3 emission = float3(0.7, 0.7, 1.0)*glow*0.6;
@@ -199,7 +203,13 @@ gbuffer_out frag_gbuffer(vs_out v)
     return o;
 }
 
-float frag_quarter_depth(vs_out v) : SV_Target0
+struct distance_out
+{
+    float distance : SV_Target0;
+    half steps : SV_Target1;
+};
+
+distance_out frag_quarter_depth(vs_out v)
 {
 #if UNITY_UV_STARTS_AT_TOP
     v.spos.y *= -1.0;
@@ -207,14 +217,17 @@ float frag_quarter_depth(vs_out v) : SV_Target0
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_march, last_distance, total_distance = _ProjectionParams.y;
+    float num_steps, last_distance, total_distance = _ProjectionParams.y;
     float3 ray_pos;
-    raymarching(pos, MAX_MARCH_QUARTER_PASS, total_distance, num_march, last_distance, ray_pos);
+    raymarching(pos, MAX_MARCH_QUARTER_PASS, total_distance, num_steps, last_distance, ray_pos);
 
-    return total_distance;
+    distance_out o;
+    o.distance = total_distance;
+    o.steps = num_steps/MAX_MARCH_QUARTER_PASS;
+    return o;
 }
 
-float frag_half_depth(vs_out v) : SV_Target0
+distance_out frag_half_depth(vs_out v)
 {
 #if UNITY_UV_STARTS_AT_TOP
     v.spos.y *= -1.0;
@@ -222,11 +235,20 @@ float frag_half_depth(vs_out v) : SV_Target0
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_march, last_distance, total_distance = sample_depth(v.spos.xy*0.5+0.5);
+    float num_steps, last_distance, total_distance = sample_depth(v.spos.xy*0.5+0.5);
     float3 ray_pos;
-    raymarching(pos, MAX_MARCH_HALF_PASS, total_distance, num_march, last_distance, ray_pos);
+    raymarching(pos, MAX_MARCH_HALF_PASS, total_distance, num_steps, last_distance, ray_pos);
 
-    return total_distance;
+    distance_out o;
+    o.distance = total_distance;
+    o.steps = num_steps/MAX_MARCH_HALF_PASS;
+    return o;
+}
+
+half4 frag_show_steps(vs_out v) : SV_Target0
+{
+    float2 t = v.spos.xy*0.5+0.5;
+    return float4(tex2D(g_qsteps, t).x, 0.0, tex2D(g_hsteps, t).x, 1.0);
 }
 
 ENDCG
@@ -269,6 +291,17 @@ ENDCG
 CGPROGRAM
 #pragma vertex vert
 #pragma fragment frag_half_depth
+ENDCG
+    }
+
+    Pass {
+        Name "ShowSteps"
+        ZWrite Off
+        ZTest Always
+        Blend SrcAlpha OneMinusSrcAlpha
+CGPROGRAM
+#pragma vertex vert
+#pragma fragment frag_show_steps
 ENDCG
     }
 }
