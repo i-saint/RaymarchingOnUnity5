@@ -70,6 +70,7 @@ public class Raymarcher : MonoBehaviour
     public Material m_material;
     public bool m_enable_adaptive = true;
     public bool m_enable_temporal = true;
+    public bool m_enable_glowline = true;
     public bool m_dbg_show_steps;
     public int m_scene;
     public Color m_fog_color = new Color(0.16f, 0.13f, 0.20f);
@@ -130,6 +131,7 @@ public class Raymarcher : MonoBehaviour
         m_material.SetInt("g_scene", m_scene);
         m_material.SetInt("g_enable_adaptive", m_enable_adaptive ? 1 : 0);
         m_material.SetInt("g_enable_temporal", m_enable_temporal ? 1 : 0);
+        m_material.SetInt("g_enable_glowline", m_enable_glowline ? 1 : 0);
 
         RenderSettings.fogColor = m_fog_color;
 

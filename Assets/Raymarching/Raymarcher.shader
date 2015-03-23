@@ -13,7 +13,7 @@ CGINCLUDE
 #define MAX_MARCH_OPASS 100
 #define MAX_MARCH_QPASS 40
 #define MAX_MARCH_HPASS 20
-#define MAX_MARCH_APASS 1
+#define MAX_MARCH_APASS 5
 
 #define MAX_MARCH_SINGLE_GBUFFER_PASS 100
 
@@ -21,7 +21,7 @@ int g_scene;
 int g_hdr;
 int g_enable_adaptive;
 int g_enable_temporal;
-int g_dbg_show_steps;
+int g_enable_glowline;
 
 float map(float3 p)
 {
@@ -177,18 +177,20 @@ gbuffer_out frag_gbuffer(vs_out v)
 
         total_distance = tex2D(g_depth, v.spos.xy*0.5+0.5).x;
         ray_pos = cam_pos + ray_dir * total_distance;
+        normal = guess_normal(ray_pos);
+        //normal = float3(0.0, 0.0, 1.0);
     }
     else {
         raymarching(pos, MAX_MARCH_SINGLE_GBUFFER_PASS, total_distance, num_steps, last_distance, ray_pos);
+        normal = guess_normal(ray_pos);
     }
-    normal = guess_normal(ray_pos);
-
-    //if(last_distance>0.1) { discard; }
 
     float glow = 0.0;
-    glow += max((modc(length(ray_pos)-time*1.5, 10.0)-9.0)*2.5, 0.0);
-    float2 p = pattern(ray_pos.xz*0.5);
-    if(p.x<1.3) { glow = 0.0; }
+    if(g_enable_glowline) {
+        glow += max((modc(length(ray_pos)-time*1.5, 10.0)-9.0)*2.5, 0.0);
+        float2 p = pattern(ray_pos.xz*0.5);
+        if(p.x<1.3) { glow = 0.0; }
+    }
     glow += max(1.0-abs(dot(-get_camera_forward(), normal)) - 0.4, 0.0) * 1.0;
     
     float c = total_distance*0.01;
