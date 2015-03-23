@@ -4,7 +4,11 @@
 #include "UnityCG.cginc"
 
 #define PI      3.1415926535897932384626433832795
-#define DEG2RAD (PI/180.0)
+
+float deg2rad(float  deg) { return deg*PI/180.0; }
+float deg2rad(float2 deg) { return deg*PI/180.0; }
+float deg2rad(float3 deg) { return deg*PI/180.0; }
+float deg2rad(float4 deg) { return deg*PI/180.0; }
 
 float  modc(float  a, float  b) { return a - b * floor(a/b); }
 float2 modc(float2 a, float2 b) { return a - b * floor(a/b); }
@@ -26,22 +30,28 @@ float compute_depth(float4 clippos)
 #endif
 }
 
-sampler2D g_qsteps;
-sampler2D g_hsteps;
-
+sampler2D g_depth_prev;
 sampler2D g_depth;
-float sample_depth_internal(float2 t)
+
+float cross_depth_sample(float2 t, sampler2D s, float o)
 {
-    return modc(tex2D(g_depth, t).x, _ProjectionParams.z);
+    float2 p = (_ScreenParams.zw - 1.0)*o;
+    float d1 = tex2D(s, t).x;
+    float d2 = min(
+        min(tex2D(s, t+float2( p.x, 0.0)).x, tex2D(s, t+float2(-p.x, 0.0))).x,
+        min(tex2D(s, t+float2( 0.0, p.y)).x, tex2D(s, t+float2( 0.0,-p.y))).x );
+    return min(d1, d2);
 }
+
+float sample_prev_depth(float2 t)
+{
+    //return max(cross_depth_sample(t, g_depth_prev, 1.0)-0.01, _ProjectionParams.y);
+    return max(tex2D(g_depth_prev, t).x-0.001, _ProjectionParams.y);
+}
+
 float sample_depth(float2 t)
 {
-    float2 p = (_ScreenParams.zw - 1.0)*2.0;
-    float d1 = sample_depth_internal(t);
-    float d2 = min(
-        min(sample_depth_internal(t+float2( p.x, 0.0)), sample_depth_internal(t+float2(-p.x, 0.0))),
-        min(sample_depth_internal(t+float2( 0.0, p.y)), sample_depth_internal(t+float2( 0.0,-p.y))) );
-    return max(min(d1, d2)-0.1, 0.0);
+    return max(cross_depth_sample(t, g_depth, 2.0)-0.01, _ProjectionParams.y);
 }
 
 

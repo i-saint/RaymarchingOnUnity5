@@ -72,6 +72,7 @@ public class Raymarcher : MonoBehaviour
     public bool m_dbg_show_steps;
     public int m_scene;
     public Color m_fog_color = new Color(0.16f, 0.13f, 0.20f);
+    public RenderTexture m_rt;
     Mesh m_quad;
     Mesh m_detailed_quad;
 
@@ -86,6 +87,11 @@ public class Raymarcher : MonoBehaviour
     void Awake()
     {
         m_camera = GetComponent<Camera>();
+        //m_rt = new RenderTexture(m_camera.pixelWidth / 2, m_camera.pixelHeight / 2, 32, RenderTextureFormat.ARGBHalf);
+        //m_rt.filterMode = FilterMode.Trilinear;
+        //m_rt.Create();
+        //m_camera.targetTexture = m_rt;
+
         m_enable_adaptive_prev = m_enable_adaptive;
     }
 
@@ -162,14 +168,21 @@ public class Raymarcher : MonoBehaviour
 
                 int qdepth = Shader.PropertyToID("QuarterDepth");
                 int hdepth = Shader.PropertyToID("HalfDepth");
+                int adepth = Shader.PropertyToID("ActualDepth");
+                int pdepth = Shader.PropertyToID("PrevDepth");
                 m_cb_prepass.GetTemporaryRT(qdepth, m_camera.pixelWidth / 4, m_camera.pixelHeight / 4, 0, FilterMode.Point, RenderTextureFormat.RFloat);
                 m_cb_prepass.GetTemporaryRT(hdepth, m_camera.pixelWidth / 2, m_camera.pixelHeight / 2, 0, FilterMode.Point, RenderTextureFormat.RFloat);
+                m_cb_prepass.GetTemporaryRT(adepth, m_camera.pixelWidth / 1, m_camera.pixelHeight / 1, 0, FilterMode.Point, RenderTextureFormat.RFloat);
+                m_cb_prepass.GetTemporaryRT(pdepth, m_camera.pixelWidth / 1, m_camera.pixelHeight / 1, 0, FilterMode.Point, RenderTextureFormat.RFloat);
+
                 if (m_dbg_show_steps)
                 {
                     int qsteps = Shader.PropertyToID("QuarterSteps");
                     int hsteps = Shader.PropertyToID("HalfSteps");
+                    int asteps = Shader.PropertyToID("ActualSteps");
                     m_cb_prepass.GetTemporaryRT(qsteps, m_camera.pixelWidth / 4, m_camera.pixelHeight / 4, 0, FilterMode.Point, RenderTextureFormat.R8);
                     m_cb_prepass.GetTemporaryRT(hsteps, m_camera.pixelWidth / 2, m_camera.pixelHeight / 2, 0, FilterMode.Point, RenderTextureFormat.R8);
+                    m_cb_prepass.GetTemporaryRT(asteps, m_camera.pixelWidth / 1, m_camera.pixelHeight / 1, 0, FilterMode.Point, RenderTextureFormat.R8);
 
                     var rt = new RenderTargetIdentifier[2] { qdepth, qsteps };
                     m_cb_prepass.SetRenderTarget(rt, qdepth);
@@ -180,17 +193,18 @@ public class Raymarcher : MonoBehaviour
                     m_cb_prepass.SetGlobalTexture("g_depth", qdepth);
                     m_cb_prepass.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 2);
 
+                    rt = new RenderTargetIdentifier[2] { adepth, asteps };
+                    m_cb_prepass.SetRenderTarget(rt, adepth);
                     m_cb_prepass.SetGlobalTexture("g_depth", hdepth);
+                    m_cb_prepass.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 3);
 
                     m_cb_prepass.SetGlobalTexture("g_qsteps", qsteps);
                     m_cb_prepass.SetGlobalTexture("g_hsteps", hsteps);
-
-                    m_cb_prepass.ReleaseTemporaryRT(qsteps);
-                    m_cb_prepass.ReleaseTemporaryRT(hsteps);
+                    m_cb_prepass.SetGlobalTexture("g_asteps", asteps);
 
                     m_cb_show_steps = new CommandBuffer();
                     m_cb_show_steps.name = "Raymarcher Steps";
-                    m_cb_show_steps.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 3);
+                    m_cb_show_steps.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 4);
                     m_camera.AddCommandBuffer(CameraEvent.AfterEverything, m_cb_show_steps);
                 }
                 else
@@ -202,10 +216,14 @@ public class Raymarcher : MonoBehaviour
                     m_cb_prepass.SetGlobalTexture("g_depth", qdepth);
                     m_cb_prepass.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 2);
 
+                    m_cb_prepass.SetRenderTarget(adepth);
                     m_cb_prepass.SetGlobalTexture("g_depth", hdepth);
+                    m_cb_prepass.DrawMesh(m_quad, Matrix4x4.identity, m_material, 0, 3);
                 }
-                m_cb_prepass.ReleaseTemporaryRT(qdepth);
-                m_cb_prepass.ReleaseTemporaryRT(hdepth);
+                m_cb_prepass.Blit(adepth, pdepth);
+                m_cb_prepass.SetGlobalTexture("g_depth_prev", pdepth);
+                m_cb_prepass.SetGlobalTexture("g_depth", adepth);
+
                 m_camera.AddCommandBuffer(CameraEvent.BeforeGBuffer, m_cb_prepass);
             }
 

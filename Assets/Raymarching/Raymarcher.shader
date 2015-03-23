@@ -10,9 +10,9 @@ CGINCLUDE
 #include "UnityStandardCore.cginc"
 #include "distance_functions.cginc"
 
-#define MAX_MARCH_QUARTER_PASS 100
-#define MAX_MARCH_HALF_PASS 50
-#define MAX_MARCH_GBUFFER_PASS 25
+#define MAX_MARCH_QUARTER_PASS 1
+#define MAX_MARCH_HALF_PASS 1
+#define MAX_MARCH_ACTUAL_PASS 1
 
 #define MAX_MARCH_SINGLE_GBUFFER_PASS 100
 
@@ -24,19 +24,19 @@ int g_dbg_show_steps;
 float map(float3 p)
 {
     if(g_scene==0) {
-        return pseudo_kleinian( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+        return pseudo_kleinian( (p+float3(0.0, -0.5, 0.0)).xzy );
     }
     else if (g_scene==1) {
         return tglad_formula(p);
     }
     else {
-        return pseudo_knightyan( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+        return pseudo_knightyan( (p+float3(0.0, -0.5, 0.0)).xzy );
     }
 
     //return length(p)-1.0;
     //return kaleidoscopic_IFS(p);
-    //return pseudo_knightyan( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
-    //return hartverdrahtet( rotateX(p+float3(0.0, -0.5, 0.0), 90.0*DEG2RAD) );
+    //return pseudo_knightyan( (p+float3(0.0, -0.5, 0.0)).xzy );
+    //return hartverdrahtet( (p+float3(0.0, -0.5, 0.0)).xzy );
 }
 
 float3 guess_normal(float3 p)
@@ -135,6 +135,7 @@ void raymarching(float2 pos, const int num_steps, inout float o_total_distance, 
         o_num_steps += 1.0;
         if(o_last_distance < 0.001 || o_total_distance > max_distance) { break; }
     }
+    o_total_distance = min(o_total_distance, max_distance);
     //if(o_total_distance > max_distance) { discard; }
 }
 
@@ -159,15 +160,13 @@ gbuffer_out frag_gbuffer(vs_out v)
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    int max_steps = MAX_MARCH_SINGLE_GBUFFER_PASS;
     float num_steps;
     float last_distance;
-    float total_distance = 0.0;
+    float total_distance = _ProjectionParams.y;
     float3 ray_pos;
     if(g_enable_adaptive) {
-        total_distance = sample_depth(v.spos.xy*0.5+0.5);
-        max_steps = MAX_MARCH_GBUFFER_PASS;
-        raymarching(pos, MAX_MARCH_GBUFFER_PASS, total_distance, num_steps, last_distance, ray_pos);
+        total_distance = tex2D(g_depth, v.spos.xy*0.5+0.5);
+        raymarching(pos, 1, total_distance, num_steps, last_distance, ray_pos);
     }
     else {
         raymarching(pos, MAX_MARCH_SINGLE_GBUFFER_PASS, total_distance, num_steps, last_distance, ray_pos);
@@ -214,10 +213,11 @@ distance_out frag_quarter_depth(vs_out v)
 #if UNITY_UV_STARTS_AT_TOP
     v.spos.y *= -1.0;
 #endif
+    float2 tpos = v.spos.xy*0.5+0.5;
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_steps, last_distance, total_distance = _ProjectionParams.y;
+    float num_steps, last_distance, total_distance = max(tex2D(g_depth_prev, tpos).x - 0.2, _ProjectionParams.y);
     float3 ray_pos;
     raymarching(pos, MAX_MARCH_QUARTER_PASS, total_distance, num_steps, last_distance, ray_pos);
 
@@ -232,10 +232,11 @@ distance_out frag_half_depth(vs_out v)
 #if UNITY_UV_STARTS_AT_TOP
     v.spos.y *= -1.0;
 #endif
+    float2 tpos = v.spos.xy*0.5+0.5;
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_steps, last_distance, total_distance = sample_depth(v.spos.xy*0.5+0.5);
+    float num_steps, last_distance, total_distance = sample_depth(tpos);
     float3 ray_pos;
     raymarching(pos, MAX_MARCH_HALF_PASS, total_distance, num_steps, last_distance, ray_pos);
 
@@ -245,10 +246,33 @@ distance_out frag_half_depth(vs_out v)
     return o;
 }
 
+distance_out frag_actual_depth(vs_out v)
+{
+#if UNITY_UV_STARTS_AT_TOP
+    v.spos.y *= -1.0;
+#endif
+    float2 tpos = v.spos.xy*0.5+0.5;
+    float2 pos = v.spos.xy;
+    pos.x *= _ScreenParams.x / _ScreenParams.y;
+
+    float num_steps, last_distance, total_distance = sample_prev_depth(tpos);
+    float3 ray_pos;
+    raymarching(pos, MAX_MARCH_ACTUAL_PASS, total_distance, num_steps, last_distance, ray_pos);
+
+    distance_out o;
+    o.distance = total_distance;
+    o.steps = num_steps/MAX_MARCH_ACTUAL_PASS;
+    return o;
+}
+
+sampler2D g_qsteps;
+sampler2D g_hsteps;
+sampler2D g_asteps;
 half4 frag_show_steps(vs_out v) : SV_Target0
 {
     float2 t = v.spos.xy*0.5+0.5;
-    return float4(tex2D(g_qsteps, t).x, 0.0, tex2D(g_hsteps, t).x, 1.0);
+    float3 l = float3(tex2D(g_qsteps, t).x, tex2D(g_hsteps, t).x, tex2D(g_asteps, t).x);
+    return float4(l.xyz, 1.0);
 }
 
 ENDCG
@@ -291,6 +315,16 @@ ENDCG
 CGPROGRAM
 #pragma vertex vert
 #pragma fragment frag_half_depth
+ENDCG
+    }
+    
+    Pass {
+        Name "ActualDepth"
+        ZWrite Off
+        ZTest Always
+CGPROGRAM
+#pragma vertex vert
+#pragma fragment frag_actual_depth
 ENDCG
     }
 
