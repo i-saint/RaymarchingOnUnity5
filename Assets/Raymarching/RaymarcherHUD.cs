@@ -23,8 +23,14 @@ public class RaymarcherHUD : MonoBehaviour
         Raymarcher rm = GetComponent<Raymarcher>();
 
         rm.enabled = GUI.Toggle(new Rect(20, 20, 200, 20), rm.enabled, "enable raymarcher");
-        rm.m_enable_adaptive = GUI.Toggle(new Rect(20, 50, 200, 20), rm.m_enable_adaptive, "enable adaptive raymarching");
-        rm.m_dbg_show_steps = GUI.Toggle(new Rect(20, 80, 200, 20), rm.m_dbg_show_steps, "show march steps");
+        rm.m_enable_adaptive = GUI.Toggle(new Rect(20, 50, 200, 20), rm.m_enable_adaptive, "adaptive subsampling");
+        if (rm.m_enable_adaptive)
+        {
+            rm.m_enable_temporal = GUI.Toggle(new Rect(30, 80, 200, 20), rm.m_enable_temporal, "temporal marching");
+        }
+
+
+        //rm.m_dbg_show_steps = GUI.Toggle(new Rect(20, 110, 200, 20), rm.m_dbg_show_steps, "show march steps");
 
         if (GUI.Button(new Rect(30, 110, 120, 20), "next scene"))
         {

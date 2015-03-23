@@ -6,9 +6,9 @@
 #define PI      3.1415926535897932384626433832795
 
 float deg2rad(float  deg) { return deg*PI/180.0; }
-float deg2rad(float2 deg) { return deg*PI/180.0; }
-float deg2rad(float3 deg) { return deg*PI/180.0; }
-float deg2rad(float4 deg) { return deg*PI/180.0; }
+float2 deg2rad(float2 deg) { return deg*PI/180.0; }
+float3 deg2rad(float3 deg) { return deg*PI/180.0; }
+float4 deg2rad(float4 deg) { return deg*PI/180.0; }
 
 float  modc(float  a, float  b) { return a - b * floor(a/b); }
 float2 modc(float2 a, float2 b) { return a - b * floor(a/b); }
@@ -32,6 +32,7 @@ float compute_depth(float4 clippos)
 
 sampler2D g_depth_prev;
 sampler2D g_depth;
+sampler2D g_velocity;
 
 float cross_depth_sample(float2 t, sampler2D s, float o)
 {
@@ -45,13 +46,12 @@ float cross_depth_sample(float2 t, sampler2D s, float o)
 
 float sample_prev_depth(float2 t)
 {
-    //return max(cross_depth_sample(t, g_depth_prev, 1.0)-0.01, _ProjectionParams.y);
     return max(tex2D(g_depth_prev, t).x-0.001, _ProjectionParams.y);
 }
 
-float sample_depth(float2 t)
+float sample_upper_depth(float2 t)
 {
-    return max(cross_depth_sample(t, g_depth, 2.0)-0.01, _ProjectionParams.y);
+    return max(cross_depth_sample(t, g_depth, 2.0)*0.995, _ProjectionParams.y);
 }
 
 

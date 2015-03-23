@@ -10,15 +10,17 @@ CGINCLUDE
 #include "UnityStandardCore.cginc"
 #include "distance_functions.cginc"
 
-#define MAX_MARCH_QUARTER_PASS 1
-#define MAX_MARCH_HALF_PASS 1
-#define MAX_MARCH_ACTUAL_PASS 1
+#define MAX_MARCH_OPASS 100
+#define MAX_MARCH_QPASS 40
+#define MAX_MARCH_HPASS 20
+#define MAX_MARCH_APASS 1
 
 #define MAX_MARCH_SINGLE_GBUFFER_PASS 100
 
 int g_scene;
 int g_hdr;
 int g_enable_adaptive;
+int g_enable_temporal;
 int g_dbg_show_steps;
 
 float map(float3 p)
@@ -160,32 +162,34 @@ gbuffer_out frag_gbuffer(vs_out v)
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_steps;
-    float last_distance;
+    float num_steps = 1.0;
+    float last_distance = 0.0;
     float total_distance = _ProjectionParams.y;
     float3 ray_pos;
+    float3 normal;
     if(g_enable_adaptive) {
-        total_distance = tex2D(g_depth, v.spos.xy*0.5+0.5);
-        raymarching(pos, 1, total_distance, num_steps, last_distance, ray_pos);
+        float3 cam_pos      = get_camera_position();
+        float3 cam_forward  = get_camera_forward();
+        float3 cam_up       = get_camera_up();
+        float3 cam_right    = get_camera_right();
+        float  cam_focal_len= get_camera_focal_length();
+        float3 ray_dir = normalize(cam_right*pos.x + cam_up*pos.y + cam_forward*cam_focal_len);
+
+        total_distance = tex2D(g_depth, v.spos.xy*0.5+0.5).x;
+        ray_pos = cam_pos + ray_dir * total_distance;
     }
     else {
         raymarching(pos, MAX_MARCH_SINGLE_GBUFFER_PASS, total_distance, num_steps, last_distance, ray_pos);
     }
+    normal = guess_normal(ray_pos);
 
     //if(last_distance>0.1) { discard; }
 
-    float3 cam_forward  = get_camera_forward();
-    float3 normal = guess_normal(ray_pos);
-
-    float glow = max((modc(length(ray_pos)-time*1.5, 10.0)-9.0)*2.5, 0.0);
+    float glow = 0.0;
+    glow += max((modc(length(ray_pos)-time*1.5, 10.0)-9.0)*2.5, 0.0);
     float2 p = pattern(ray_pos.xz*0.5);
-    if(p.x<1.3) {
-        glow = 0.0;
-    }
-    else {
-        glow += 0.0;
-    }
-    glow += max(1.0-abs(dot(-cam_forward, normal)) - 0.4, 0.0) * 0.5;
+    if(p.x<1.3) { glow = 0.0; }
+    glow += max(1.0-abs(dot(-get_camera_forward(), normal)) - 0.4, 0.0) * 1.0;
     
     float c = total_distance*0.01;
     float4 color = float4( c + float3(0.02, 0.02, 0.025)*num_steps*0.4, 1.0 );
@@ -205,10 +209,18 @@ gbuffer_out frag_gbuffer(vs_out v)
 struct distance_out
 {
     float distance : SV_Target0;
-    half steps : SV_Target1;
+    //half steps : SV_Target1;
 };
 
-distance_out frag_quarter_depth(vs_out v)
+struct opass_out
+{
+    float distance : SV_Target0;
+    half diff : SV_Target1;
+};
+
+#define DIFF_THRESHILD 0.0001
+
+opass_out frag_opass(vs_out v)
 {
 #if UNITY_UV_STARTS_AT_TOP
     v.spos.y *= -1.0;
@@ -217,17 +229,18 @@ distance_out frag_quarter_depth(vs_out v)
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_steps, last_distance, total_distance = max(tex2D(g_depth_prev, tpos).x - 0.2, _ProjectionParams.y);
+    float num_steps, last_distance, total_distance = _ProjectionParams.y;
     float3 ray_pos;
-    raymarching(pos, MAX_MARCH_QUARTER_PASS, total_distance, num_steps, last_distance, ray_pos);
+    raymarching(pos, MAX_MARCH_OPASS, total_distance, num_steps, last_distance, ray_pos);
 
-    distance_out o;
+    opass_out o;
     o.distance = total_distance;
-    o.steps = num_steps/MAX_MARCH_QUARTER_PASS;
+    o.diff = total_distance - tex2D(g_depth_prev, tpos).x;
     return o;
 }
 
-distance_out frag_half_depth(vs_out v)
+
+distance_out adaptive_pass(vs_out v, int max_steps)
 {
 #if UNITY_UV_STARTS_AT_TOP
     v.spos.y *= -1.0;
@@ -236,34 +249,22 @@ distance_out frag_half_depth(vs_out v)
     float2 pos = v.spos.xy;
     pos.x *= _ScreenParams.x / _ScreenParams.y;
 
-    float num_steps, last_distance, total_distance = sample_depth(tpos);
+    float num_steps, last_distance, total_distance = sample_upper_depth(tpos);
     float3 ray_pos;
-    raymarching(pos, MAX_MARCH_HALF_PASS, total_distance, num_steps, last_distance, ray_pos);
+    if(g_enable_temporal && abs(tex2D(g_velocity, tpos).x) < DIFF_THRESHILD) {
+        total_distance = max(total_distance, sample_prev_depth(tpos));
+    }
+    raymarching(pos, max_steps, total_distance, num_steps, last_distance, ray_pos);
 
     distance_out o;
     o.distance = total_distance;
-    o.steps = num_steps/MAX_MARCH_HALF_PASS;
     return o;
 }
 
-distance_out frag_actual_depth(vs_out v)
-{
-#if UNITY_UV_STARTS_AT_TOP
-    v.spos.y *= -1.0;
-#endif
-    float2 tpos = v.spos.xy*0.5+0.5;
-    float2 pos = v.spos.xy;
-    pos.x *= _ScreenParams.x / _ScreenParams.y;
+distance_out frag_qpass(vs_out v) { return adaptive_pass(v, MAX_MARCH_QPASS); }
+distance_out frag_hpass(vs_out v) { return adaptive_pass(v, MAX_MARCH_HPASS); }
+distance_out frag_apass(vs_out v) { return adaptive_pass(v, MAX_MARCH_APASS); }
 
-    float num_steps, last_distance, total_distance = sample_prev_depth(tpos);
-    float3 ray_pos;
-    raymarching(pos, MAX_MARCH_ACTUAL_PASS, total_distance, num_steps, last_distance, ray_pos);
-
-    distance_out o;
-    o.distance = total_distance;
-    o.steps = num_steps/MAX_MARCH_ACTUAL_PASS;
-    return o;
-}
 
 sampler2D g_qsteps;
 sampler2D g_hsteps;
@@ -297,34 +298,44 @@ CGPROGRAM
 #pragma fragment frag_gbuffer
 ENDCG
     }
-
+    
     Pass {
-        Name "QuarterDepth"
+        Name "ODepth"
         ZWrite Off
         ZTest Always
 CGPROGRAM
 #pragma vertex vert
-#pragma fragment frag_quarter_depth
+#pragma fragment frag_opass
 ENDCG
     }
 
     Pass {
-        Name "HalfDepth"
+        Name "QDepth"
         ZWrite Off
         ZTest Always
 CGPROGRAM
 #pragma vertex vert
-#pragma fragment frag_half_depth
+#pragma fragment frag_qpass
+ENDCG
+    }
+
+    Pass {
+        Name "HDepth"
+        ZWrite Off
+        ZTest Always
+CGPROGRAM
+#pragma vertex vert
+#pragma fragment frag_hpass
 ENDCG
     }
     
     Pass {
-        Name "ActualDepth"
+        Name "ADepth"
         ZWrite Off
         ZTest Always
 CGPROGRAM
 #pragma vertex vert
-#pragma fragment frag_actual_depth
+#pragma fragment frag_apass
 ENDCG
     }
 
