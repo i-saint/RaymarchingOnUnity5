@@ -74,7 +74,7 @@ public class Raymarcher : MonoBehaviour
     public bool m_dbg_show_steps;
     public int m_scene;
     public Color m_fog_color = new Color(0.16f, 0.13f, 0.20f);
-    public RenderTexture m_rt;
+    Vector2 m_resolution_prev;
     Mesh m_quad;
     Mesh m_detailed_quad;
 
@@ -89,10 +89,6 @@ public class Raymarcher : MonoBehaviour
     void Awake()
     {
         m_camera = GetComponent<Camera>();
-        //m_rt = new RenderTexture(m_camera.pixelWidth / 2, m_camera.pixelHeight / 2, 32, RenderTextureFormat.ARGBHalf);
-        //m_rt.filterMode = FilterMode.Trilinear;
-        //m_rt.Create();
-        //m_camera.targetTexture = m_rt;
 
         m_enable_adaptive_prev = m_enable_adaptive;
     }
@@ -145,6 +141,14 @@ public class Raymarcher : MonoBehaviour
         }
 
         bool need_to_reflesh_command_buffer = false;
+
+        Vector2 reso = new Vector2(m_camera.pixelWidth, m_camera.pixelHeight);
+        if(m_resolution_prev!=reso)
+        {
+            m_resolution_prev = reso;
+            need_to_reflesh_command_buffer = true;
+        }
+
         if (m_enable_adaptive_prev != m_enable_adaptive)
         {
             m_enable_adaptive_prev = m_enable_adaptive;
