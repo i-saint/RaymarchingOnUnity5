@@ -1,4 +1,4 @@
-﻿Shader "Raymarcher/Copy" {
+﻿Shader "ResolutionScaler/Copy" {
 Properties {
     _MainTex ("Source", 2D) = "white" {}
 }

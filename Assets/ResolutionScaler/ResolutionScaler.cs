@@ -26,6 +26,7 @@ public class ResolutionScaler : MonoBehaviour
 
     void Update()
     {
+        if (m_maincamera == null) m_maincamera = Camera.main;
         if (m_maincamera == null) return;
 
         Camera cam = GetComponent<Camera>();
