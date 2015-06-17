@@ -23,7 +23,7 @@ float get_camera_focal_length() { return abs(UNITY_MATRIX_P[1][1]); }
 
 float compute_depth(float4 clippos)
 {
-#if defined(SHADER_TARGET_GLSL)
+#if defined(SHADER_TARGET_GLSL) || defined(SHADER_API_GLES) || defined(SHADER_API_GLES3)
     return ((clippos.z / clippos.w) + 1.0) * 0.5;
 #else
     return clippos.z / clippos.w;
